@@ -87,8 +87,30 @@ jobs:
           context: .
           push: true
           platforms: ${{ inputs.platform }}
+          # PostHog. Docker build args are NOT inherited from the environment,
+          # so without these two lines the frontend ships with no PostHog token
+          # at all -- which is what the production image will do on its next
+          # rebuild, silently, because the running one was built with the token
+          # supplied outside this pipeline.
+          #
+          # Repository-level `vars`, deliberately not per-environment: there is
+          # one PostHog project (the free plan allows one) and dev/staging share
+          # production's token, kept out of the dashboard by the backend's
+          # POSTHOG_PROD_HOSTS filter rather than by a second project. The
+          # `build` job declares no `environment:`, so `vars` resolves repo-wide
+          # here -- intended, not an oversight.
+          #
+          # `vars` not `secrets`: the token is public and write-only by design,
+          # it ships inside the JS bundle, so hiding it buys nothing and costs
+          # the ability to see what was built.
+          #
+          # These comments sit above the key on purpose: inside a `|` block
+          # scalar a `#` is literal text, not a YAML comment, so a comment there
+          # would be handed to build-push-action as a bogus --build-arg.
           build-args: |
             VITE_API_BASE_URL=${{ steps.vars.outputs.API_BASE_URL }}
+            VITE_POSTHOG_PROJECT_TOKEN=${{ vars.VITE_POSTHOG_PROJECT_TOKEN }}
+            VITE_POSTHOG_HOST=${{ vars.VITE_POSTHOG_HOST }}
           tags: |
             ${{ inputs.harbor_registry }}/${{ inputs.harbor_project }}/${{ inputs.repo_name }}:${{ steps.vars.outputs.IMAGE_TAG }}
             ${{ inputs.harbor_registry }}/${{ inputs.harbor_project }}/${{ inputs.repo_name }}:latest
